@@ -1,166 +1,139 @@
 # AutoWindows
-PowerShell script to quickly deploy and roll back a Windows penetration testing lab configuration with reduced security controls for internal testing environments.
-# Atom Windows Penetration Testing Test Box Setup
 
-This repository contains a menu-driven PowerShell script for configuring a Windows host as an internal penetration testing test box. It can also roll back the changes when testing is complete.
+A menu-driven PowerShell script for deploying and rolling back lab-oriented Windows configuration changes on an internal penetration testing test box.
 
-> **Warning**
-> This script intentionally weakens or disables multiple Windows security controls during deployment. Use it only on authorized, isolated, internal lab systems. Do not run it on production systems, domain controllers, employee workstations, internet-facing hosts, or unmanaged networks.
+> ⚠️ **For isolated, internal test systems only.** Do not use on production systems, user workstations, domain controllers, internet-facing hosts, or unmanaged networks.
 
-## Purpose
+---
 
-The script helps prepare a Windows test box for authorized penetration testing, malware simulation, payload testing, exploit validation, tooling validation, and other internal lab activities.
+## Features
 
-It provides a simple front-end menu with options to:
+- **Deploy** — weakens security controls to reduce friction for authorized lab testing
+- **Rollback** — restores original settings captured at deploy time (not just hardcoded defaults)
+- **Status view** — snapshot of every setting this script manages
+- **Run summary** — colour-coded pass/fail table shown after every deploy or rollback
+- **Transcript logging** — each run writes a timestamped `.log` file alongside the script
 
-1. Deploy the lab configuration
-2. Roll back the lab configuration
-3. Show the current status of key settings
-4. Exit
-
-## What Deploy Mode Changes
-
-Deploy mode applies the following lab-oriented settings:
-
-- Sets the PowerShell execution policy to `Unrestricted`
-- Disables UAC elevation prompts for local administrators
-- Disables Windows Firewall for Domain, Public, and Private profiles
-- Adds a Microsoft Defender exclusion for the `X:\` drive
-- Disables Microsoft Defender real-time monitoring
-- Sets Microsoft Defender policy registry values to disable antivirus/antispyware behavior
-- Sets the system time zone to Eastern Standard Time
-- Changes power settings to keep the system awake during testing
-- Disables Bluetooth network adapters
-- Disables the Windows News and Interests taskbar widget for the current user
-- Disables IPv6 bindings on all network adapters
-- Disables and stops the Windows Update service
-
-## What Rollback Mode Changes
-
-Rollback mode attempts to reverse the deployment changes by applying safer default-style settings:
-
-- Sets the PowerShell execution policy to `RemoteSigned`
-- Restores default UAC consent prompts for local administrators
-- Re-enables Windows Firewall for Domain, Public, and Private profiles
-- Removes the Microsoft Defender exclusion for `X:\`
-- Re-enables Microsoft Defender real-time monitoring
-- Removes the Defender policy registry values created by deploy mode
-- Restores common balanced/default-style power settings
-- Re-enables Bluetooth network adapters
-- Re-enables the Windows News and Interests taskbar widget for the current user
-- Re-enables IPv6 bindings on all network adapters
-- Sets Windows Update to manual/demand start and starts the service
-
-## Important Rollback Notes
-
-Rollback mode is a best-effort reversal. It does not track the exact pre-deployment state of every setting.
-
-For example:
-
-- Bluetooth adapters with `bluetooth` in the name are re-enabled, even if they were already disabled before deployment.
-- Power settings are restored to common default-style values, not necessarily the host's previous custom values.
-- Windows Update is set to manual/demand start to avoid overriding environments with custom update policies.
-- Defender policy changes may require a reboot before they fully apply.
-- Organization-managed systems may have Group Policy, MDM, EDR, or security tooling that overrides these settings.
-
-The safest rollback option is still to revert a VM snapshot or rebuild the test box from a clean image.
-
-## Intended Use
-
-Use this only when all of the following are true:
-
-- You are working in an authorized penetration testing or lab environment
-- The target system is an internal test box
-- The system is isolated from untrusted networks
-- You understand the security impact of each setting
-- You have approval to weaken host security controls for testing purposes
+---
 
 ## Requirements
 
-- Windows 10, Windows 11, or a compatible Windows Server version
-- Local administrator privileges
-- Elevated PowerShell session
-- Internal network or isolated lab environment
+| Requirement | Detail |
+|---|---|
+| OS | Windows 10 / 11 or Windows Server 2016+ |
+| PowerShell | 5.1 or later |
+| Privileges | Must be run from an **elevated** (Administrator) session |
+
+---
 
 ## Usage
 
-1. Open PowerShell as Administrator.
-2. Review the script before running it.
-3. Execute the script:
+1. Right-click PowerShell and choose **Run as administrator**.
+2. Navigate to the directory containing the script.
+3. Run:
 
 ```powershell
-.\AtomWindowsSetupV0.4.ps1
+.\AutoWindows.ps1
 ```
 
-4. Choose an option from the menu:
+4. Select an option from the menu:
 
-```text
+```
+Atom Windows Internal Pentest Test Box Setup
+================================================
 1. Deploy lab configuration
 2. Roll back lab configuration
 3. Show current status
 4. Exit
 ```
 
-For safety, deploy and rollback actions require typed confirmation:
+Both **Deploy** and **Rollback** require you to type a confirmation word (`DEPLOY` or `ROLLBACK`) before making any changes.
 
-- Type `DEPLOY` to deploy the lab configuration
-- Type `ROLLBACK` to roll back the lab configuration
+---
 
-## Recommended Deployment Workflow
+## What Deploy Does
 
-For repeatable lab builds:
+| Setting | Change |
+|---|---|
+| PowerShell Execution Policy | `Unrestricted` (LocalMachine scope) |
+| UAC elevation prompt | Disabled (`ConsentPromptBehaviorAdmin = 0`) |
+| Windows Firewall | Disabled on Domain, Public, and Private profiles |
+| Microsoft Defender real-time monitoring | Disabled |
+| Defender policy keys | `DisableAntiSpyware`, `DisableAntiVirus`, `ServiceKeepAlive` set via registry |
+| Defender exclusion | `X:\` added (intentional — used for tool staging) |
+| Time zone | Set to Eastern Standard Time |
+| Power timeouts (AC) | Monitor: 60 min, Sleep: never |
+| Power timeouts (battery) | Monitor: never, Sleep: never |
+| Bluetooth adapters | Disabled |
+| News/Interests taskbar widget | Disabled |
+| IPv6 bindings | Disabled on all adapters |
+| Windows Update service | Stopped and set to `disabled` |
 
-1. Start from a clean Windows VM or dedicated test host.
-2. Take a VM snapshot before running the script.
-3. Run the script and choose deploy mode.
-4. Perform authorized testing.
-5. Run rollback mode, revert the VM snapshot, or rebuild the host after testing.
+A snapshot of the **original** values is saved to `lab_snapshot.json` in the same directory before any changes are made.
 
-Recommended safeguards:
+---
 
-- Keep the host on an isolated VLAN or lab-only network
-- Do not reuse the configured system for production work
-- Document when and why the script was run
-- Reboot after deployment or rollback if Defender, UAC, or Windows Update behavior does not immediately reflect the change
+## What Rollback Does
 
-## Security Impact
+Rollback reads `lab_snapshot.json` and restores the **original** values captured at deploy time. If no snapshot exists, it falls back to the safe defaults listed below.
 
-Deploy mode makes the system significantly less secure. In particular:
+| Setting | Fallback default (no snapshot) |
+|---|---|
+| Execution Policy | `RemoteSigned` |
+| UAC elevation prompt | `5` (Windows default: consent for non-Windows binaries) |
+| Windows Firewall | Re-enabled on all profiles |
+| Defender real-time monitoring | Re-enabled |
+| Defender policy keys | Removed |
+| Defender exclusion `X:\` | Removed |
+| Time zone | Eastern Standard Time |
+| Power timeouts (AC) | Monitor: 10 min, Sleep: 30 min |
+| Power timeouts (battery) | Monitor: 5 min, Sleep: 15 min |
+| Bluetooth adapters | Re-enabled (snapshot-recorded adapters only) |
+| News/Interests widget | Restored to `0` (icon + text) |
+| IPv6 bindings | Re-enabled on all adapters |
+| Windows Update service | Set to `demand` start and started |
 
-- Disabling Defender may allow malicious files to run without detection
-- Disabling Firewall may expose services to the network
-- Disabling Windows Update prevents patch installation
-- Disabling UAC prompts reduces protection against privilege misuse
-- Disabling IPv6 may break modern Windows networking functionality
-- Disabling Bluetooth adapters may affect peripherals or wireless lab equipment
+> **Note:** Windows Update is restored to `demand` start rather than `automatic` to avoid overriding custom update policies in managed environments.
 
-These tradeoffs may be acceptable in a controlled penetration testing lab, but they are not appropriate for standard endpoints.
+---
 
-## Troubleshooting
+## Files Created at Runtime
 
-### The script will not run
+| File | Description |
+|---|---|
+| `lab_snapshot.json` | Pre-deploy settings snapshot; used by rollback to restore original values |
+| `AutoWindows_YYYYMMDD_HHmmss.log` | PowerShell transcript for each run |
 
-Open PowerShell as Administrator and run:
+Both files are written to the same directory as the script.
 
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
-.\AutoWindows.ps1
+---
+
+## Run Summary
+
+After every deploy or rollback, a colour-coded summary is printed:
+
+```
+=== Run Summary ===
+[OK]   Set ExecutionPolicy: Unrestricted
+[OK]   Disable UAC prompt (ConsentPromptBehaviorAdmin=0)
+[FAIL] Disable Windows Firewall (all profiles) — Access denied
+...
+Completed: 14 succeeded, 1 failed.
 ```
 
-This changes execution policy only for the current PowerShell process.
+Failed steps include an error detail to aid troubleshooting. All output is also captured in the transcript log.
 
-### Some settings do not change immediately
+---
 
-Reboot the system. Defender, UAC, service, and registry-policy changes may not fully apply until after restart.
+## Notes
 
-### Defender settings are reverted automatically
+- A **reboot** may be required for Defender policy, UAC, and service-related changes to fully take effect.
+- The `X:\` Defender exclusion is added unconditionally during deploy regardless of whether the drive is mounted. This is intentional — the drive is typically attached after configuration.
+- Bluetooth rollback re-enables only the adapters recorded in the snapshot. If deploy was run without a prior snapshot, all adapters matching `*bluetooth*` are re-enabled, which may include adapters that were already disabled before the script ran.
+- This script does **not** back up or restore Windows Firewall rules — only the enabled/disabled state of each profile.
 
-The host may be managed by Group Policy, MDM, EDR, or another endpoint security platform. Confirm whether centralized policy is overriding local settings.
+---
 
-### Rollback does not restore the exact original settings
+## License
 
-Rollback mode restores safer default-style settings. For exact restoration, use a VM snapshot or rebuild from a clean image.
-
-## Disclaimer
-
-This project is for authorized internal penetration testing and lab use only. You are responsible for ensuring that use of this script complies with your organization’s policies, client authorization, and applicable laws.
+For internal lab use only. Review your organization's policies before use.
